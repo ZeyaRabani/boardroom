@@ -30,9 +30,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-!.env.example
+# env files — never commit real keys. Only the example template is tracked.
+.env
+.env.*
+.env.local
+!.env.local.example
 
 # vercel
 .vercel

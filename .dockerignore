@@ -4,7 +4,7 @@ node_modules
 .gitignore
 npm-debug.log
 .env*
-!.env.example
+!.env.local.example
 *.md
 Dockerfile
 .dockerignore

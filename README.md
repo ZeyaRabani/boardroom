@@ -4,6 +4,20 @@ An AI board meeting that analyzes your startup idea. Five agents — **VC, CFO, 
 
 Built with **Next.js 15** (App Router) + **CopilotKit v1**, powered by **Gemini** via Vertex AI or AI Studio, with a swappable provider layer and a **credential-free mock** for instant local development.
 
+Architecture is intentionally simple — **Frontend (CopilotKit) → Boardroom backend (Next.js API routes) → Gemini API** — with no hosted CopilotKit cloud service required.
+
+### What's included
+
+| # | Requirement | Where |
+|---|---|---|
+| 1 | Boardroom page | `src/app/page.tsx` → `src/components/Boardroom.tsx` |
+| 2 | Five agents (VC, CFO, CTO, Customer, Competitor) | `src/lib/agents/personas.ts` |
+| 3 | Backend API routes | `src/app/api/board/{analyze,synthesize}`, `api/upload`, `api/copilotkit`, `api/provider` |
+| 4 | Gemini integration (reads `GEMINI_API_KEY` from env) | `src/lib/llm/gemini.ts` + `src/lib/llm/google.ts` |
+| 5 | Structured JSON output | Zod schemas in `src/lib/types.ts`, validated in `google.ts` |
+| 6 | Local run instructions | [Quick Start](#quick-start) below |
+| 7 | Cloud Run deployment | [Deploy to Google Cloud Run](#deploy-to-google-cloud-run) + `Dockerfile` + `cloudbuild.yaml` |
+
 ---
 
 ## Quick Start
@@ -18,15 +32,28 @@ npm run dev
 
 Open <http://localhost:3000>, click **"use example"**, then **"Convene the board"** (and the weekend CTA) to see the full board meeting play out with mock data.
 
+### Run live with Gemini (Google AI Studio)
+
+```bash
+cp .env.local.example .env.local
+# edit .env.local and set:
+#   LLM_PROVIDER=gemini
+#   GEMINI_API_KEY=<your Google AI Studio key>   # https://aistudio.google.com/app/apikey
+npm run dev
+```
+
+The header badge flips from **"Demo mode · mock"** to **"Live · gemini"** once a key is detected. Remove the key (or set `DEMO_MODE=true`) to fall back to the credential-free mock.
+
 ## Environment Variables
 
-Copy `.env.example` to `.env.local` and fill in the values you need. With **no credentials** the app runs in demo mode using the Mock provider.
+Copy `.env.local.example` to `.env.local` and fill in the values you need. **Never commit real keys** — `.env.local` is git-ignored. With **no credentials** the app runs in demo mode using the Mock provider.
 
 | Variable | Description |
 |---|---|
 | `LLM_PROVIDER` | `"vertex"` \| `"gemini"` \| `"mock"` \| `"auto"` (default). `auto` picks the first provider that has credentials, falling back to mock. |
-| `GEMINI_MODEL` | Model ID (default `gemini-2.0-flash`). |
-| `GEMINI_API_KEY` | Google AI Studio API key ([get one here](https://aistudio.google.com/app/apikey)). Enables the `gemini` provider and powers CopilotKit chat. |
+| `DEMO_MODE` | Set `true` to force the credential-free Mock provider even when a key is present. |
+| `GEMINI_MODEL` | Model ID (default `gemini-2.5-flash`). |
+| `GEMINI_API_KEY` | Google AI Studio API key ([get one here](https://aistudio.google.com/app/apikey)). Enables the `gemini` provider and powers CopilotKit chat. Read from the environment only — never committed. |
 | `GOOGLE_CLOUD_PROJECT` | GCP project ID for Vertex AI. |
 | `GOOGLE_CLOUD_LOCATION` | GCP region for Vertex AI (e.g. `us-central1`). |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to a service-account JSON (Vertex AI). On Cloud Run, use the service identity or Workload Identity instead. |

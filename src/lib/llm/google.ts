@@ -10,7 +10,7 @@ import type {
   LLMProvider,
 } from "./types";
 
-const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
 /** Pull the first JSON object/array out of a model response. */
 function extractJSON(raw: string): string {

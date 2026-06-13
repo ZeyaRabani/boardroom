@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare } from "lucide-react";
+import { ChevronDown, MessageSquare } from "lucide-react";
 import { AGENTS, type AgentAnalysis, type AgentMessageStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -36,13 +37,23 @@ function TypingDots({ accent }: { accent: string }) {
 export interface AgentMessageProps {
   analysis: AgentAnalysis;
   status?: AgentMessageStatus;
+  /** When true, the body is hidden behind a tap-to-expand toggle (the headline
+   *  + stance stay visible) so the board reads as a clean summary first. */
+  collapsible?: boolean;
 }
 
-export function AgentMessage({ analysis, status = "done" }: AgentMessageProps) {
+export function AgentMessage({
+  analysis,
+  status = "done",
+  collapsible = false,
+}: AgentMessageProps) {
   const profile = AGENTS[analysis.role];
   const stance = STANCE_STYLES[analysis.stance];
   const isSpeaking = status === "speaking";
   const isThinking = status === "thinking";
+  const [open, setOpen] = useState(!collapsible);
+  const showBody = !isThinking && (open || !collapsible);
+  const toggle = () => collapsible && setOpen((o) => !o);
 
   return (
     <motion.div
@@ -62,12 +73,17 @@ export function AgentMessage({ analysis, status = "done" }: AgentMessageProps) {
       )}
 
       <div
+        onClick={toggle}
         className={cn(
           "relative overflow-hidden rounded-2xl border p-5 transition-colors duration-300",
           isSpeaking
             ? "border-white/15 bg-[#0b1020]"
             : "border-white/10 bg-[#0b1020]/80",
+          collapsible && "cursor-pointer hover:border-white/20",
         )}
+        {...(collapsible
+          ? { role: "button" as const, "aria-expanded": open, tabIndex: 0 }
+          : {})}
       >
         {/* left accent bar */}
         <div
@@ -112,6 +128,16 @@ export function AgentMessage({ analysis, status = "done" }: AgentMessageProps) {
                 />
                 {analysis.stance}
               </span>
+
+              {collapsible && (
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-white/30 transition-transform duration-300",
+                    open && "rotate-180",
+                  )}
+                  aria-hidden
+                />
+              )}
             </div>
 
             {/* tagline */}
@@ -132,7 +158,7 @@ export function AgentMessage({ analysis, status = "done" }: AgentMessageProps) {
             </motion.h3>
 
             {/* ── body / status states ───────────────────────────── */}
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="wait" initial={false}>
               {isThinking ? (
                 <motion.div
                   key="thinking"
@@ -143,18 +169,31 @@ export function AgentMessage({ analysis, status = "done" }: AgentMessageProps) {
                 >
                   <TypingDots accent={profile.accent} />
                 </motion.div>
-              ) : (
+              ) : showBody ? (
                 <motion.div
                   key="body"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.1 }}
-                  className="mt-2.5"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="overflow-hidden"
                 >
-                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-white/65">
+                  <p className="mt-2.5 whitespace-pre-wrap text-[13px] leading-relaxed text-white/65">
                     {analysis.analysis}
                   </p>
                 </motion.div>
+              ) : (
+                <motion.button
+                  key="collapsed"
+                  type="button"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="mt-2 text-[11px] font-medium uppercase tracking-wider text-white/30 hover:text-white/55"
+                >
+                  Read full take
+                </motion.button>
               )}
             </AnimatePresence>
           </div>
