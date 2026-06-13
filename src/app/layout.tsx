@@ -26,13 +26,16 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const chatEnabled = Boolean(
+    process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY,
+  );
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-[#070a14] text-white">
-        <Providers>{children}</Providers>
+        <Providers chatEnabled={chatEnabled}>{children}</Providers>
       </body>
     </html>
   );

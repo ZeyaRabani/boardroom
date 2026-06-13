@@ -23,14 +23,9 @@ import { cn } from "@/lib/utils";
 
 const WEEKEND_QUESTION = "What should I build this weekend to prove this?";
 
-function ProviderBadge() {
-  const [info, setInfo] = useState<{ name: string; live: boolean } | null>(null);
-  useEffect(() => {
-    fetch("/api/provider")
-      .then((r) => r.json())
-      .then(setInfo)
-      .catch(() => setInfo(null));
-  }, []);
+type ProviderInfo = { name: string; live: boolean; chat: boolean };
+
+function ProviderBadge({ info }: { info: ProviderInfo | null }) {
   if (!info) return null;
   return (
     <span
@@ -73,6 +68,14 @@ export function Boardroom() {
   const board = useBoard();
   const { state, setIdea, analyze, synthesize } = board;
   const [uploading, setUploading] = useState(false);
+  const [provider, setProvider] = useState<ProviderInfo | null>(null);
+
+  useEffect(() => {
+    fetch("/api/provider")
+      .then((r) => r.json())
+      .then(setProvider)
+      .catch(() => setProvider(null));
+  }, []);
 
   const onDrop = useCallback(
     async (files: File[]) => {
@@ -115,7 +118,7 @@ export function Boardroom() {
             Convene a live AI board to pressure-test your startup idea.
           </p>
         </div>
-        <ProviderBadge />
+        <ProviderBadge info={provider} />
       </header>
 
       {/* Idea input */}
@@ -279,16 +282,20 @@ export function Boardroom() {
         )}
       </div>
 
-      <CopilotSidebar
-        labels={{
-          title: "Boardroom",
-          initial:
-            "Hi — I'm your board chair. Share a startup idea and I'll convene the board, or ask me what to build this weekend to prove it.",
-        }}
-        defaultOpen={false}
-        clickOutsideToClose
-      />
-      <BoardCopilot board={board} />
+      {provider?.chat && (
+        <>
+          <CopilotSidebar
+            labels={{
+              title: "Boardroom",
+              initial:
+                "Hi — I'm your board chair. Share a startup idea and I'll convene the board, or ask me what to build this weekend to prove it.",
+            }}
+            defaultOpen={false}
+            clickOutsideToClose
+          />
+          <BoardCopilot board={board} />
+        </>
+      )}
     </div>
   );
 }
