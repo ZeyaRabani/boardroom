@@ -2,6 +2,10 @@
  * Provider selection. Set LLM_PROVIDER to "vertex" | "gemini" | "mock".
  * When unset or "auto", we pick the first provider that has credentials and
  * fall back to the credential-free Mock provider so the app always runs.
+ *
+ * Set DEMO_MODE=true to force the credential-free Mock provider even when keys
+ * are present (useful for offline demos). Gemini being unavailable also falls
+ * back to demo mode automatically.
  */
 
 import { MockProvider } from "./mock";
@@ -13,7 +17,14 @@ export type ProviderName = "vertex" | "gemini" | "mock" | "auto";
 
 let cached: LLMProvider | null = null;
 
+function demoModeForced(): boolean {
+  const v = (process.env.DEMO_MODE ?? "").toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
 function build(): LLMProvider {
+  if (demoModeForced()) return new MockProvider();
+
   const choice = (process.env.LLM_PROVIDER ?? "auto").toLowerCase() as ProviderName;
 
   const tryVertex = () => {

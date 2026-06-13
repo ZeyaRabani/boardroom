@@ -6,7 +6,12 @@
  */
 
 import { AGENT_ROLES, type AgentRole } from "../types";
-import { SAMPLE_AGENT_ANALYSES, SAMPLE_SYNTHESIS } from "../sample";
+import {
+  SAMPLE_AGENT_ANALYSES,
+  SAMPLE_SANDBOX_IMPACT,
+  SAMPLE_SANDBOX_REACTIONS,
+  SAMPLE_SYNTHESIS,
+} from "../sample";
 import type {
   GenerateJSONParams,
   GenerateTextParams,
@@ -38,6 +43,18 @@ export class MockProvider implements LLMProvider {
 
     if (tag === "synthesis" || (!tag && isSynthesis(haystack))) {
       return params.schema.parse(SAMPLE_SYNTHESIS) as T;
+    }
+
+    if (tag === "sandbox-impact") {
+      return params.schema.parse(SAMPLE_SANDBOX_IMPACT) as T;
+    }
+
+    if (tag?.startsWith("sandbox:")) {
+      const sandboxRole = tag.slice("sandbox:".length);
+      const reaction =
+        (AGENT_ROLES as string[]).includes(sandboxRole) &&
+        SAMPLE_SANDBOX_REACTIONS[sandboxRole as AgentRole];
+      return params.schema.parse(reaction || SAMPLE_SANDBOX_REACTIONS.vc) as T;
     }
 
     const role: AgentRole =

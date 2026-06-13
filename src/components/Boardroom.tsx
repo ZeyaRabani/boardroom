@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { CopilotKit } from "@copilotkit/react-core";
 import { CopilotSidebar } from "@copilotkit/react-ui";
-import { FileUp, Loader2, Sparkles } from "lucide-react";
+import "@copilotkit/react-ui/styles.css";
+import { ChevronDown, FileUp, Loader2, Sparkles } from "lucide-react";
 import {
   ActionPlan,
   AgentMessage,
@@ -16,21 +18,18 @@ import {
   ScoreCard,
 } from "@/components/board";
 import { BoardCopilot } from "@/components/BoardCopilot";
+import { StrategicSandbox } from "@/components/StrategicSandbox";
 import { AGENTS, AGENT_ROLES } from "@/lib/types";
 import { SAMPLE_IDEA } from "@/lib/sample";
 import { useBoard } from "@/lib/useBoard";
+import { useSandbox } from "@/lib/useSandbox";
 import { cn } from "@/lib/utils";
 
 const WEEKEND_QUESTION = "What should I build this weekend to prove this?";
 
-function ProviderBadge() {
-  const [info, setInfo] = useState<{ name: string; live: boolean } | null>(null);
-  useEffect(() => {
-    fetch("/api/provider")
-      .then((r) => r.json())
-      .then(setInfo)
-      .catch(() => setInfo(null));
-  }, []);
+type ProviderInfo = { name: string; live: boolean; chat: boolean };
+
+function ProviderBadge({ info }: { info: ProviderInfo | null }) {
   if (!info) return null;
   return (
     <span
@@ -69,10 +68,77 @@ function Section({
   );
 }
 
+/** Collapsible section — detail stays hidden until the user asks for it, so the
+ *  board reads as a clean summary first (progressive disclosure). */
+function Disclosure({
+  title,
+  count,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  count?: number;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-lg py-1 text-left"
+      >
+        <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-white/40">
+          {title}
+        </h2>
+        {typeof count === "number" && (
+          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-white/50">
+            {count}
+          </span>
+        )}
+        <ChevronDown
+          className={cn(
+            "ml-auto h-4 w-4 text-white/40 transition-transform duration-300",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-hidden"
+          >
+            <div className="pt-3">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.section>
+  );
+}
+
 export function Boardroom() {
   const board = useBoard();
+  const sandbox = useSandbox();
   const { state, setIdea, analyze, synthesize } = board;
   const [uploading, setUploading] = useState(false);
+  const [provider, setProvider] = useState<ProviderInfo | null>(null);
+
+  useEffect(() => {
+    fetch("/api/provider")
+      .then((r) => r.json())
+      .then(setProvider)
+      .catch(() => setProvider(null));
+  }, []);
 
   const onDrop = useCallback(
     async (files: File[]) => {
@@ -115,7 +181,7 @@ export function Boardroom() {
             Convene a live AI board to pressure-test your startup idea.
           </p>
         </div>
-        <ProviderBadge />
+        <ProviderBadge info={provider} />
       </header>
 
       {/* Idea input */}
@@ -206,10 +272,15 @@ export function Boardroom() {
         {/* Transcript */}
         {state.messages.length > 0 && (
           <Section title="The debate">
+            <p className="-mt-1 text-xs text-white/30">
+              Each member opens with their headline take — tap a card to read the full analysis.
+            </p>
             <div className="space-y-3">
               {AGENT_ROLES.map((role) => {
                 const msg = state.messages.find((m) => m.role === role);
-                return msg ? <AgentMessage key={role} analysis={msg} /> : null;
+                return msg ? (
+                  <AgentMessage key={role} analysis={msg} collapsible />
+                ) : null;
               })}
             </div>
           </Section>
@@ -225,31 +296,43 @@ export function Boardroom() {
 
         {/* Risks */}
         {state.analysis && state.analysis.risks.length > 0 && (
-          <Section title="Risks">
+          <Disclosure title="Risks" count={state.analysis.risks.length}>
             <div className="grid gap-3 md:grid-cols-2">
               {state.analysis.risks.map((risk) => (
                 <RiskCard key={risk.id} risk={risk} />
               ))}
             </div>
-          </Section>
+          </Disclosure>
         )}
 
         {/* Opportunities */}
         {state.analysis && state.analysis.opportunities.length > 0 && (
-          <Section title="Opportunities">
+          <Disclosure
+            title="Opportunities"
+            count={state.analysis.opportunities.length}
+          >
             <div className="grid gap-3 md:grid-cols-2">
               {state.analysis.opportunities.map((opp) => (
                 <OpportunityCard key={opp.id} opportunity={opp} />
               ))}
             </div>
-          </Section>
+          </Disclosure>
         )}
 
         {/* Roadmap */}
         {state.roadmap && (
-          <Section title="MVP roadmap">
+          <Disclosure title="MVP roadmap">
             <MVPRoadmap roadmap={state.roadmap} />
-          </Section>
+          </Disclosure>
+        )}
+
+        {/* Strategic Sandbox — live "what-if" simulation on the analyzed idea */}
+        {state.analysis && (
+          <StrategicSandbox
+            idea={state.idea}
+            analysis={state.analysis}
+            sandbox={sandbox}
+          />
         )}
 
         {/* Weekend synthesis */}
@@ -279,16 +362,24 @@ export function Boardroom() {
         )}
       </div>
 
-      <CopilotSidebar
-        labels={{
-          title: "Boardroom",
-          initial:
-            "Hi — I'm your board chair. Share a startup idea and I'll convene the board, or ask me what to build this weekend to prove it.",
-        }}
-        defaultOpen={false}
-        clickOutsideToClose
-      />
-      <BoardCopilot board={board} />
+      {/* The CopilotKit runtime only registers a 'default' agent when a Gemini
+          chat key is configured. Mounting the provider and its consumers
+          together off the same runtime flag avoids a build-time vs runtime
+          split and keeps zero-cred demo mode crash-free. */}
+      {provider?.chat && (
+        <CopilotKit runtimeUrl="/api/copilotkit" showDevConsole={false}>
+          <CopilotSidebar
+            labels={{
+              title: "Boardroom",
+              initial:
+                "Hi — I'm your board chair. Share a startup idea and I'll convene the board, or ask me what to build this weekend to prove it.",
+            }}
+            defaultOpen={false}
+            clickOutsideToClose
+          />
+          <BoardCopilot board={board} sandbox={sandbox} />
+        </CopilotKit>
+      )}
     </div>
   );
 }
