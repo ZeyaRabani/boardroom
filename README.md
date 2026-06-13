@@ -1,36 +1,143 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Boardroom
 
-## Getting Started
+An AI board meeting that analyzes your startup idea. Five agents — **VC, CFO, CTO, Customer, and Competitor** — debate the idea in real time and render rich **generative UI**: RiskCard, OpportunityCard, ScoreCard, CompetitorMap, MVPRoadmap, BoardMemo, and ActionPlan.
 
-First, run the development server:
+Built with **Next.js 15** (App Router) + **CopilotKit v1**, powered by **Gemini** via Vertex AI or AI Studio, with a swappable provider layer and a **credential-free mock** for instant local development.
+
+---
+
+## Quick Start
 
 ```bash
+# Install dependencies (legacy flag required for Node 22)
+npm install --legacy-peer-deps
+
+# Start the dev server — works immediately in demo mode, no keys needed
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000>, click **"use example"**, then **"Convene the board"** (and the weekend CTA) to see the full board meeting play out with mock data.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Copy `.env.example` to `.env.local` and fill in the values you need. With **no credentials** the app runs in demo mode using the Mock provider.
 
-## Learn More
+| Variable | Description |
+|---|---|
+| `LLM_PROVIDER` | `"vertex"` \| `"gemini"` \| `"mock"` \| `"auto"` (default). `auto` picks the first provider that has credentials, falling back to mock. |
+| `GEMINI_MODEL` | Model ID (default `gemini-2.0-flash`). |
+| `GEMINI_API_KEY` | Google AI Studio API key ([get one here](https://aistudio.google.com/app/apikey)). Enables the `gemini` provider and powers CopilotKit chat. |
+| `GOOGLE_CLOUD_PROJECT` | GCP project ID for Vertex AI. |
+| `GOOGLE_CLOUD_LOCATION` | GCP region for Vertex AI (e.g. `us-central1`). |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to a service-account JSON (Vertex AI). On Cloud Run, use the service identity or Workload Identity instead. |
 
-To learn more about Next.js, take a look at the following resources:
+## Commands
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run dev          # local dev at http://localhost:3000
+npm run build        # production build (output: standalone)
+npm run lint         # eslint
+npx tsc --noEmit     # typecheck
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Deploy to Google Cloud Run
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The project includes a multi-stage `Dockerfile` (Next.js standalone output) and a `cloudbuild.yaml` for Cloud Build.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Prerequisites
+
+- A GCP project with Cloud Run, Cloud Build, and Artifact Registry APIs enabled.
+- An Artifact Registry Docker repository (e.g. `boardroom` in `us-central1`).
+- `gcloud` CLI authenticated.
+
+### Option A: Cloud Build (recommended)
+
+```bash
+gcloud builds submit \
+  --config cloudbuild.yaml \
+  --substitutions=_REGION=us-central1,_SERVICE=boardroom,_REPO=boardroom
+```
+
+This builds the image, pushes it to Artifact Registry, and deploys to Cloud Run in one step.
+
+### Option B: Manual build + deploy
+
+```bash
+# Build locally
+docker build -t boardroom .
+
+# Tag and push
+docker tag boardroom us-central1-docker.pkg.dev/YOUR_PROJECT/boardroom/boardroom:latest
+docker push us-central1-docker.pkg.dev/YOUR_PROJECT/boardroom/boardroom:latest
+
+# Deploy
+gcloud run deploy boardroom \
+  --image us-central1-docker.pkg.dev/YOUR_PROJECT/boardroom/boardroom:latest \
+  --region us-central1 \
+  --platform managed \
+  --allow-unauthenticated
+```
+
+### Passing Model Credentials
+
+With **no env vars** the service runs in demo/mock mode. To enable live AI:
+
+#### AI Studio path (simplest)
+
+```bash
+gcloud run deploy boardroom \
+  --update-env-vars LLM_PROVIDER=gemini,GEMINI_API_KEY=AIza...
+```
+
+Or store the key as a Cloud Run secret:
+
+```bash
+echo -n "AIza..." | gcloud secrets create gemini-api-key --data-file=-
+
+gcloud run deploy boardroom \
+  --update-secrets GEMINI_API_KEY=gemini-api-key:latest \
+  --update-env-vars LLM_PROVIDER=gemini
+```
+
+#### Vertex AI path
+
+Use the Cloud Run service account's identity (no key file needed):
+
+```bash
+gcloud run deploy boardroom \
+  --update-env-vars LLM_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=my-project,GOOGLE_CLOUD_LOCATION=us-central1 \
+  --service-account my-vertex-sa@my-project.iam.gserviceaccount.com
+```
+
+Or with Workload Identity Federation — attach the appropriate IAM bindings and set the env vars. No `GOOGLE_APPLICATION_CREDENTIALS` file is needed on Cloud Run.
+
+---
+
+## Architecture
+
+```
+src/
+  lib/
+    types.ts          # shared types + zod schemas (source of truth)
+    sample.ts         # sample board output (mock + previews)
+    utils.ts          # cn() class merge helper
+    useBoard.ts       # client hook: streaming analyze + synthesize
+    llm/              # provider abstraction (vertex | gemini | mock)
+    agents/           # 5 personas + orchestrator
+  components/
+    board/            # 8 generative UI components + barrel
+    Boardroom.tsx     # main canvas (idea input, roster, transcript, cards)
+    BoardCopilot.tsx  # CopilotKit actions/readables
+  app/
+    api/board/analyze     # POST { idea } -> NDJSON stream
+    api/board/synthesize  # POST { idea, analysis, question } -> BoardSynthesis
+    api/copilotkit        # CopilotKit runtime
+    api/upload            # POST PDF -> { text }
+    api/provider          # GET -> active provider info
+```
+
+## License
+
+MIT
