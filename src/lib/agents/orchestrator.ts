@@ -11,9 +11,13 @@ import {
   AGENT_ROLES,
   AGENTS,
   agentAnalysisSchema,
+  agentReactionSchema,
   boardSynthesisSchema,
+  sandboxImpactSchema,
   type AgentAnalysis,
   type AgentAnalysisRaw,
+  type AgentReaction,
+  type AgentReactionRaw,
   type AgentRole,
   type BoardAnalysis,
   type BoardStreamEvent,
@@ -21,6 +25,8 @@ import {
   type CompetitorMapData,
   type MVPRoadmapData,
   type RoadmapPhase,
+  type SandboxResult,
+  type SandboxStreamEvent,
   type ScoreCardData,
   type ScoreDimension,
   type Verdict,
@@ -30,6 +36,10 @@ import {
   COMPETITOR_X_AXIS,
   COMPETITOR_Y_AXIS,
   PERSONAS,
+  REACTION_SCHEMA_HINT,
+  SANDBOX_IMPACT_SCHEMA_HINT,
+  SANDBOX_IMPACT_SYSTEM,
+  SANDBOX_PERSONAS,
   SYNTHESIS_SCHEMA_HINT,
 } from "./personas";
 
@@ -245,4 +255,156 @@ export async function runBoardSynthesis(input: {
       items: raw.actionPlan.items.map((it, i) => ({ ...it, id: `act-${i + 1}` })),
     },
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Strategic Sandbox — live "what-if" simulation                              */
+/* -------------------------------------------------------------------------- */
+
+export interface SandboxRunOptions {
+  onEvent?: (event: SandboxStreamEvent) => void;
+}
+
+/** Compact baseline of the board so reactions stay grounded in the analysis. */
+function baselineContext(analysis: BoardAnalysis): string {
+  const positions = analysis.agents
+    .map((a) => `- ${AGENTS[a.role].title} (${a.stance}): ${a.headline}`)
+    .join("\n");
+  return `Baseline board score: ${analysis.scorecard.overall}/100 (${analysis.scorecard.verdict}).\nBoard positions before any changes:\n${positions}`;
+}
+
+function reactionPrompt(input: {
+  role: AgentRole;
+  idea: string;
+  analysis: BoardAnalysis;
+  scenario: string;
+  history: string[];
+}): string {
+  const { role, idea, analysis, scenario, history } = input;
+  const prior = analysis.agents.find((a) => a.role === role);
+  const yourPrior = prior
+    ? `Your prior position: ${prior.stance} — "${prior.headline}"`
+    : "";
+  const historyBlock =
+    history.length > 0
+      ? `\nChanges already applied this session (cumulative, in order):\n${history
+          .map((h, i) => `${i + 1}. ${h}`)
+          .join("\n")}\n`
+      : "";
+  return `The board is evaluating this startup:\n"""${idea}"""\n\n${baselineContext(
+    analysis,
+  )}\n${yourPrior}\n${historyBlock}
+The founder now proposes this change:\n"""${scenario}"""\n\nReact to THIS change through your own incentives. Return ONLY the JSON object.`;
+}
+
+function clampScore(n: number): number {
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+/**
+ * Run the Strategic Sandbox for a single proposed change: every board member
+ * reacts through their own incentives (they may disagree), then the chair
+ * synthesises winners / losers / tradeoffs / second-order effects and a net
+ * delta to the board's score. Streams reactions as they land.
+ */
+export async function runStrategicSandbox(input: {
+  idea: string;
+  analysis: BoardAnalysis;
+  scenario: string;
+  history?: string[];
+  options?: SandboxRunOptions;
+}): Promise<SandboxResult> {
+  const { idea, analysis, scenario } = input;
+  const history = input.history ?? [];
+  const provider = getProvider();
+  const emit = (e: SandboxStreamEvent) => input.options?.onEvent?.(e);
+
+  emit({ type: "status", message: `The board is reacting (${provider.name})…` });
+
+  const reactions = await Promise.all(
+    AGENT_ROLES.map(async (role): Promise<AgentReaction> => {
+      emit({ type: "reaction_start", role });
+      try {
+        const raw: AgentReactionRaw = await provider.generateJSON({
+          system: SANDBOX_PERSONAS[role],
+          prompt: reactionPrompt({ role, idea, analysis, scenario, history }),
+          schema: agentReactionSchema,
+          schemaHint: REACTION_SCHEMA_HINT,
+          temperature: 0.8,
+          tag: `sandbox:${role}`,
+        });
+        const reaction: AgentReaction = { role, ...raw };
+        emit({ type: "reaction_done", reaction });
+        return reaction;
+      } catch (err) {
+        console.error(`[sandbox] reaction ${role} failed:`, err);
+        const reaction: AgentReaction = {
+          role,
+          stance: "neutral",
+          direction: "neutral",
+          reaction: `${AGENTS[role].title} could not be reached.`,
+          reasoning: "The model did not return a valid reaction for this seat.",
+          intensity: 0,
+        };
+        emit({ type: "reaction_done", reaction });
+        return reaction;
+      }
+    }),
+  );
+
+  let impact;
+  try {
+    impact = await provider.generateJSON({
+      system: SANDBOX_IMPACT_SYSTEM,
+      prompt: sandboxImpactPrompt({ idea, analysis, scenario, history, reactions }),
+      schema: sandboxImpactSchema,
+      schemaHint: SANDBOX_IMPACT_SCHEMA_HINT,
+      temperature: 0.7,
+      tag: "sandbox-impact",
+    });
+  } catch (err) {
+    console.error("[sandbox] impact synthesis failed:", err);
+    impact = {
+      winners: [],
+      losers: [],
+      tradeoffs: [],
+      secondOrder: [],
+      netDelta: 0,
+      verdict: "The board could not synthesise the impact of this change.",
+    };
+  }
+
+  emit({ type: "impact", impact });
+
+  const result: SandboxResult = { scenario, reactions, ...impact };
+  emit({ type: "complete", result });
+  return result;
+}
+
+function sandboxImpactPrompt(input: {
+  idea: string;
+  analysis: BoardAnalysis;
+  scenario: string;
+  history: string[];
+  reactions: AgentReaction[];
+}): string {
+  const { idea, analysis, scenario, history, reactions } = input;
+  const board = reactions
+    .map(
+      (r) =>
+        `- ${AGENTS[r.role].title} [${r.direction}] (${r.stance}): ${r.reaction}`,
+    )
+    .join("\n");
+  const historyBlock =
+    history.length > 0
+      ? `\nChanges already applied before this one (cumulative):\n${history
+          .map((h, i) => `${i + 1}. ${h}`)
+          .join("\n")}\n`
+      : "";
+  return `Startup under evaluation:\n"""${idea}"""\n\nBaseline board score: ${analysis.scorecard.overall}/100 (${analysis.scorecard.verdict}).${historyBlock}\nThe founder proposed this change:\n"""${scenario}"""\n\nThe board reacted:\n${board}\n\nSynthesise the board-level impact of this change. netDelta is the change to the ${analysis.scorecard.overall}/100 score (realistic range -25..+25). Return ONLY the JSON object.`;
+}
+
+/** Apply a netDelta to a baseline score, clamped to 0-100. */
+export function applyNetDelta(baseline: number, netDelta: number): number {
+  return clampScore(baseline + netDelta);
 }

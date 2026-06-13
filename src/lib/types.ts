@@ -262,6 +262,53 @@ export interface BoardSynthesis {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Strategic Sandbox — live "what-if" simulation                              */
+/* -------------------------------------------------------------------------- */
+
+/** Which way a board member's conviction moved in response to a change. */
+export type ReactionDirection = "up" | "down" | "neutral";
+
+/**
+ * How a single board member reacts to a founder's proposed change, viewed
+ * strictly through that member's own incentives and worldview.
+ */
+export interface AgentReaction {
+  role: AgentRole;
+  /** Stance after the change is applied. */
+  stance: Stance;
+  /** Did this member's conviction move up, down, or hold? */
+  direction: ReactionDirection;
+  /** Punchy one-liner in the member's voice, e.g. "adoption increases". */
+  reaction: string;
+  /** 1-2 sentences of reasoning grounded in this member's incentives. */
+  reasoning: string;
+  /** 0-100 — how strongly this member cares about this particular change. */
+  intensity: number;
+}
+
+/**
+ * Board-level read-out of a single proposed change: who wins, who loses, the
+ * tensions it creates, and the non-obvious downstream effects.
+ */
+export interface SandboxResult {
+  /** The change the founder proposed, e.g. "Cut prices by 50%". */
+  scenario: string;
+  reactions: AgentReaction[];
+  /** Who/what benefits from the change. */
+  winners: string[];
+  /** Who/what is hurt by the change. */
+  losers: string[];
+  /** Explicit tensions the change creates ("X improves but Y suffers"). */
+  tradeoffs: string[];
+  /** Non-obvious downstream / second-order consequences. */
+  secondOrder: string[];
+  /** Change to the board's overall 0-100 conviction score (-100..100). */
+  netDelta: number;
+  /** One-line board headline summarising the net effect. */
+  verdict: string;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Streaming protocol (server -> client)                                      */
 /* -------------------------------------------------------------------------- */
 
@@ -277,6 +324,29 @@ export type BoardStreamEvent =
   | { type: "competitor_map"; competitorMap: CompetitorMapData }
   | { type: "roadmap"; roadmap: MVPRoadmapData }
   | { type: "complete"; analysis: BoardAnalysis }
+  | { type: "error"; message: string };
+
+/**
+ * Events streamed from /api/board/sandbox while the board reacts to a founder's
+ * proposed change. Reactions arrive one member at a time, then the board-level
+ * impact lands, so the simulation feels live.
+ */
+export type SandboxStreamEvent =
+  | { type: "status"; message: string }
+  | { type: "reaction_start"; role: AgentRole }
+  | { type: "reaction_done"; reaction: AgentReaction }
+  | {
+      type: "impact";
+      impact: {
+        winners: string[];
+        losers: string[];
+        tradeoffs: string[];
+        secondOrder: string[];
+        netDelta: number;
+        verdict: string;
+      };
+    }
+  | { type: "complete"; result: SandboxResult }
   | { type: "error"; message: string };
 
 /* -------------------------------------------------------------------------- */
@@ -380,3 +450,33 @@ export const boardSynthesisSchema = z.object({
   actionPlan: actionPlanSchema,
 });
 export type BoardSynthesisRaw = z.infer<typeof boardSynthesisSchema>;
+
+/* -------------------------------------------------------------------------- */
+/* Strategic Sandbox schemas                                                  */
+/* -------------------------------------------------------------------------- */
+
+export const reactionDirectionSchema = z.enum(["up", "down", "neutral"]);
+
+/**
+ * Raw shape each board member emits when reacting to a proposed change. The
+ * orchestrator stamps on `role`, so the model never invents it.
+ */
+export const agentReactionSchema = z.object({
+  stance: stanceSchema,
+  direction: reactionDirectionSchema,
+  reaction: z.string(),
+  reasoning: z.string(),
+  intensity: z.number().min(0).max(100),
+});
+export type AgentReactionRaw = z.infer<typeof agentReactionSchema>;
+
+/** Board-level impact synthesis for a single proposed change. */
+export const sandboxImpactSchema = z.object({
+  winners: z.array(z.string()),
+  losers: z.array(z.string()),
+  tradeoffs: z.array(z.string()),
+  secondOrder: z.array(z.string()),
+  netDelta: z.number().min(-100).max(100),
+  verdict: z.string(),
+});
+export type SandboxImpactRaw = z.infer<typeof sandboxImpactSchema>;

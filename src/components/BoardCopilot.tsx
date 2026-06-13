@@ -3,13 +3,20 @@
 import { useCopilotAction, useCopilotReadable } from "@copilotkit/react-core";
 import { ActionPlan, BoardMemo } from "@/components/board";
 import type { useBoard } from "@/lib/useBoard";
+import type { useSandbox } from "@/lib/useSandbox";
 
 /**
  * Registers the board state + actions with CopilotKit so the chat copilot can
- * convene the board and draft the weekend plan, rendering generative UI in-chat.
- * Renders nothing itself.
+ * convene the board, draft the weekend plan, and run Strategic Sandbox
+ * what-ifs, rendering generative UI in-chat. Renders nothing itself.
  */
-export function BoardCopilot({ board }: { board: ReturnType<typeof useBoard> }) {
+export function BoardCopilot({
+  board,
+  sandbox,
+}: {
+  board: ReturnType<typeof useBoard>;
+  sandbox: ReturnType<typeof useSandbox>;
+}) {
   const { state, analyze, synthesize } = board;
 
   useCopilotReadable({
@@ -89,6 +96,35 @@ export function BoardCopilot({ board }: { board: ReturnType<typeof useBoard> }) 
         );
       }
       return <div className="text-sm text-white/60">Preparing…</div>;
+    },
+  });
+
+  useCopilotAction({
+    name: "proposeScenario",
+    description:
+      "Run a Strategic Sandbox 'what-if' on the analyzed idea — each board " +
+      "member reacts through their own incentives and the board surfaces " +
+      "winners, losers, tradeoffs, and second-order effects. The board must " +
+      "have analyzed an idea first. Use for prompts like 'what if we cut " +
+      "prices by 50%?' or 'what if we raised $10M?'.",
+    parameters: [
+      {
+        name: "scenario",
+        type: "string",
+        description:
+          "The change the founder proposes, e.g. 'Cut prices by 50%'.",
+        required: true,
+      },
+    ],
+    handler: async ({ scenario }) => {
+      if (!state.analysis) {
+        return "Convene the board on an idea first, then propose a what-if.";
+      }
+      await sandbox.run(scenario, {
+        idea: state.idea,
+        analysis: state.analysis,
+      });
+      return "The board reacted in the Strategic Sandbox on the canvas — see each member's reaction plus winners, losers, tradeoffs, and second-order effects.";
     },
   });
 

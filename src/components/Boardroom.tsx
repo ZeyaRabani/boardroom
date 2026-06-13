@@ -18,9 +18,11 @@ import {
   ScoreCard,
 } from "@/components/board";
 import { BoardCopilot } from "@/components/BoardCopilot";
+import { StrategicSandbox } from "@/components/StrategicSandbox";
 import { AGENTS, AGENT_ROLES } from "@/lib/types";
 import { SAMPLE_IDEA } from "@/lib/sample";
 import { useBoard } from "@/lib/useBoard";
+import { useSandbox } from "@/lib/useSandbox";
 import { cn } from "@/lib/utils";
 
 const WEEKEND_QUESTION = "What should I build this weekend to prove this?";
@@ -126,6 +128,7 @@ function Disclosure({
 
 export function Boardroom() {
   const board = useBoard();
+  const sandbox = useSandbox();
   const { state, setIdea, analyze, synthesize } = board;
   const [uploading, setUploading] = useState(false);
   const [provider, setProvider] = useState<ProviderInfo | null>(null);
@@ -323,6 +326,15 @@ export function Boardroom() {
           </Disclosure>
         )}
 
+        {/* Strategic Sandbox — live "what-if" simulation on the analyzed idea */}
+        {state.analysis && (
+          <StrategicSandbox
+            idea={state.idea}
+            analysis={state.analysis}
+            sandbox={sandbox}
+          />
+        )}
+
         {/* Weekend synthesis */}
         {state.analysis && (
           <Section title="The ask">
@@ -365,7 +377,7 @@ export function Boardroom() {
             defaultOpen={false}
             clickOutsideToClose
           />
-          <BoardCopilot board={board} />
+          <BoardCopilot board={board} sandbox={sandbox} />
         </CopilotKit>
       )}
     </div>

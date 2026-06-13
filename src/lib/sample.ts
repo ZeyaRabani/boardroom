@@ -10,11 +10,14 @@
 import type {
   ActionPlanData,
   AgentAnalysis,
+  AgentReaction,
+  AgentRole,
   BoardAnalysis,
   BoardMemoData,
   BoardSynthesis,
   CompetitorMapData,
   MVPRoadmapData,
+  SandboxResult,
   ScoreCardData,
 } from "./types";
 
@@ -966,4 +969,76 @@ export const SAMPLE_ACTION_PLAN: ActionPlanData = {
 export const SAMPLE_SYNTHESIS: BoardSynthesis = {
   memo: SAMPLE_MEMO,
   actionPlan: SAMPLE_ACTION_PLAN,
+};
+
+/* ── Strategic Sandbox (demo "what-if": cut prices by 50%) ─────────────────── */
+
+export const SAMPLE_SANDBOX_REACTIONS: Record<AgentRole, AgentReaction> = {
+  vc: {
+    role: "vc",
+    stance: "bullish",
+    direction: "up",
+    reaction: "Cheaper price, faster land-grab — I like the wedge.",
+    reasoning:
+      "Halving price accelerates logo acquisition and data accumulation, which compounds the roadmap moat. The bigger top-of-funnel is exactly the venture-scale dynamic I want.",
+    intensity: 78,
+  },
+  cfo: {
+    role: "cfo",
+    stance: "bearish",
+    direction: "down",
+    reaction: "Margins crater; we're buying revenue at a loss.",
+    reasoning:
+      "A 50% cut puts us underwater on inference COGS per ticket and pushes break-even out by quarters. We'd be subsidising every new customer.",
+    intensity: 92,
+  },
+  cto: {
+    role: "cto",
+    stance: "neutral",
+    direction: "neutral",
+    reaction: "No build change, but volume stresses the pipeline.",
+    reasoning:
+      "Pricing is a config change, so feasibility is unaffected — but 2-3x ticket volume means the clustering pipeline needs cost controls and rate limits sooner.",
+    intensity: 40,
+  },
+  customer: {
+    role: "customer",
+    stance: "bullish",
+    direction: "up",
+    reaction: "Half price? I'd finally get budget sign-off.",
+    reasoning:
+      "At this price the tool clears my discretionary spend threshold, so I can adopt without a procurement fight. Adoption and satisfaction both jump.",
+    intensity: 85,
+  },
+  competitor: {
+    role: "competitor",
+    stance: "bullish",
+    direction: "up",
+    reaction: "Thanks for starting a price war I can win.",
+    reasoning:
+      "As the better-capitalised incumbent, I can match your price and outlast you on burn. You've handed me a margin fight on my terms.",
+    intensity: 80,
+  },
+};
+
+export const SAMPLE_SANDBOX_IMPACT = {
+  winners: ["Customer adoption", "Top-of-funnel growth", "Data moat velocity"],
+  losers: ["Gross margin", "Runway", "Pricing power"],
+  tradeoffs: [
+    "Adoption surges but unit economics turn negative",
+    "Faster land-grab now versus a deeper cash hole later",
+  ],
+  secondOrder: [
+    "A price war the better-funded incumbent is positioned to win",
+    "Cheaper price anchors the market low, making future increases painful",
+  ],
+  netDelta: -12,
+  verdict:
+    "Adoption spikes, but margins and defensibility erode — a growth bet that hands competitors a burn fight.",
+};
+
+export const SAMPLE_SANDBOX_RESULT: SandboxResult = {
+  scenario: "Cut prices by 50%",
+  reactions: Object.values(SAMPLE_SANDBOX_REACTIONS),
+  ...SAMPLE_SANDBOX_IMPACT,
 };
