@@ -2,7 +2,7 @@ import { runBoardAnalysis } from "@/lib/agents";
 import type { BoardStreamEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 /** POST { idea } -> newline-delimited JSON stream of BoardStreamEvent. */
 export async function POST(req: Request) {

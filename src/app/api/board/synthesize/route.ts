@@ -2,7 +2,7 @@ import { runBoardSynthesis } from "@/lib/agents";
 import type { BoardAnalysis } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 /** POST { idea, analysis, question? } -> BoardSynthesis (memo + action plan). */
 export async function POST(req: Request) {

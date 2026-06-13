@@ -2,7 +2,7 @@ import { runStrategicSandbox } from "@/lib/agents";
 import type { BoardAnalysis, SandboxStreamEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 /**
  * POST { idea, analysis, scenario, history? } -> newline-delimited JSON stream
