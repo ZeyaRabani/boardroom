@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { motion } from "framer-motion";
+import { CopilotKit } from "@copilotkit/react-core";
 import { CopilotSidebar } from "@copilotkit/react-ui";
+import "@copilotkit/react-ui/styles.css";
 import { FileUp, Loader2, Sparkles } from "lucide-react";
 import {
   ActionPlan,
@@ -282,8 +284,12 @@ export function Boardroom() {
         )}
       </div>
 
+      {/* The CopilotKit runtime only registers a 'default' agent when a Gemini
+          chat key is configured. Mounting the provider and its consumers
+          together off the same runtime flag avoids a build-time vs runtime
+          split and keeps zero-cred demo mode crash-free. */}
       {provider?.chat && (
-        <>
+        <CopilotKit runtimeUrl="/api/copilotkit" showDevConsole={false}>
           <CopilotSidebar
             labels={{
               title: "Boardroom",
@@ -294,7 +300,7 @@ export function Boardroom() {
             clickOutsideToClose
           />
           <BoardCopilot board={board} />
-        </>
+        </CopilotKit>
       )}
     </div>
   );
